@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { X, Upload, FileImage, Film, Images, Loader2 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
 import { decodeGif } from '@/utils/gifDecoder';
-import { loadImageFromFile, imageElementToImageData, generateId } from '@/utils/imageUtils';
+import { loadImageFromFile, imageElementToImageData, generateId, cloneImageData } from '@/utils/imageUtils';
 import { extractFramesFromVideo } from '@/utils/videoExtractor';
 import type { Frame } from '@/types';
 import { cn } from '@/lib/utils';
@@ -85,17 +85,23 @@ export default function ImportDialog({ open, onClose }: ImportDialogProps) {
         try {
           const img = await loadImageFromFile(file);
           const imageData = imageElementToImageData(img);
+          const w = imageData.width;
+          const h = imageData.height;
           frames.push({
             id: generateId(),
             imageData,
+            originalImageData: cloneImageData(imageData),
             delay: 100,
-            width: imageData.width,
-            height: imageData.height,
+            width: w,
+            height: h,
+            originalWidth: w,
+            originalHeight: h,
             disposalMethod: 2,
+            editStack: [],
           });
           setProgress(Math.round(((i + 1) / fileArray.length) * 100));
           URL.revokeObjectURL(img.src);
-        } catch (e) {
+        } catch (_e) {
           console.warn('Skipping invalid image:', file.name);
         }
       }

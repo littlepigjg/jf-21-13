@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
-import { processFrame } from '@/utils/frameProcessor';
+import { processFrameForPreview, getProcessedFrameSize } from '@/utils/frameProcessor';
 
 export default function PreviewCanvas() {
   const {
@@ -15,7 +15,6 @@ export default function PreviewCanvas() {
     crop,
     canvasWidth,
     canvasHeight,
-    selectedFrameIndex,
     setSelectedFrameIndex,
   } = useEditorStore();
 
@@ -79,7 +78,7 @@ export default function PreviewCanvas() {
     const frame = frames[currentFrameIndex];
     if (!frame) return;
 
-    const processedData = processFrame(frame, captions, currentFrameIndex, crop);
+    const processedData = processFrameForPreview(frame, captions, currentFrameIndex, crop);
     canvas.width = processedData.width;
     canvas.height = processedData.height;
     ctx.putImageData(processedData, 0, 0);
@@ -94,8 +93,10 @@ export default function PreviewCanvas() {
     }
   };
 
-  const displayWidth = canvasWidth * zoom;
-  const displayHeight = canvasHeight * zoom;
+  const currentFrame = frames[currentFrameIndex];
+  const processedSize = currentFrame ? getProcessedFrameSize(currentFrame) : { width: canvasWidth, height: canvasHeight };
+  const displayWidth = processedSize.width * zoom;
+  const displayHeight = processedSize.height * zoom;
 
   const fitToContainer = () => {
     const container = canvasRef.current?.parentElement;
@@ -103,8 +104,8 @@ export default function PreviewCanvas() {
     const padding = 80;
     const availableWidth = container.clientWidth - padding;
     const availableHeight = container.clientHeight - padding;
-    const zoomX = availableWidth / canvasWidth;
-    const zoomY = availableHeight / canvasHeight;
+    const zoomX = availableWidth / processedSize.width;
+    const zoomY = availableHeight / processedSize.height;
     setZoom(Math.min(zoomX, zoomY, 2));
   };
 
@@ -112,7 +113,7 @@ export default function PreviewCanvas() {
     <div className="flex-1 flex flex-col bg-slate-950 min-w-0">
       <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
         <div className="text-sm text-slate-400 font-mono">
-          {canvasWidth} × {canvasHeight} px
+          {processedSize.width} × {processedSize.height} px
         </div>
         <div className="flex items-center gap-1">
           <button

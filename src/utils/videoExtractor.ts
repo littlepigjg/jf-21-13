@@ -1,5 +1,5 @@
 import type { Frame } from '@/types';
-import { generateId } from './imageUtils';
+import { generateId, cloneImageData } from './imageUtils';
 
 export interface VideoExtractOptions {
   fps: number;
@@ -116,13 +116,19 @@ export async function extractFramesFromVideo(
           const task = queue[currentIndex];
           const imageData = await captureFrame(task);
 
+          const w = canvas.width;
+          const h = canvas.height;
           frames.push({
             id: generateId(),
             imageData,
+            originalImageData: cloneImageData(imageData),
             delay: Math.round(1000 / fps),
-            width: canvas.width,
-            height: canvas.height,
+            width: w,
+            height: h,
+            originalWidth: w,
+            originalHeight: h,
             disposalMethod: 2,
+            editStack: [],
           });
 
           currentIndex++;

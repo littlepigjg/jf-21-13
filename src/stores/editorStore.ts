@@ -1,6 +1,15 @@
 import { create } from 'zustand';
-import type { Frame, Caption, CropConfig, ExportConfig } from '@/types';
+import type {
+  Frame,
+  Caption,
+  CropConfig,
+  ExportConfig,
+  EditOperation,
+  EditOperationType,
+  EditParams,
+} from '@/types';
 import { generateId, cloneImageData, createBlankImageData } from '@/utils/imageUtils';
+import { processFrameForPreview } from '@/utils/frameProcessor';
 
 interface EditorStore {
   frames: Frame[];
@@ -38,7 +47,67 @@ interface EditorStore {
   setCrop: (crop: Partial<CropConfig>) => void;
   setExportConfig: (config: Partial<ExportConfig>) => void;
 
+  addEditOperation: (frameIndex: number, type: EditOperationType, params?: Partial<EditParams>) => void;
+  addEditOperationToAll: (type: EditOperationType, params?: Partial<EditParams>) => void;
+  updateEditOperation: (frameIndex: number, operationId: string, updates: Partial<EditOperation>) => void;
+  updateEditOperationParams: (frameIndex: number, operationId: string, params: Partial<EditParams>) => void;
+  toggleEditOperation: (frameIndex: number, operationId: string, enabled: boolean) => void;
+  removeEditOperation: (frameIndex: number, operationId: string) => void;
+  removeEditOperationFromAll: (operationId: string) => void;
+  moveEditOperation: (frameIndex: number, fromIndex: number, toIndex: number) => void;
+  clearEditStack: (frameIndex: number) => void;
+  clearAllEditStacks: () => void;
+
   clearAll: () => void;
+}
+
+function createFrame(imageData: ImageData, delay = 100): Frame {
+  const original = cloneImageData(imageData);
+  return {
+    id: generateId(),
+    imageData: cloneImageData(imageData),
+    originalImageData: original,
+    delay,
+    width: imageData.width,
+    height: imageData.height,
+    originalWidth: imageData.width,
+    originalHeight: imageData.height,
+    disposalMethod: 2,
+    editStack: [],
+  };
+}
+
+function getDefaultParams(type: EditOperationType, width: number, height: number): EditParams {
+  switch (type) {
+    case 'crop':
+      return { x: 0, y: 0, width, height };
+    case 'resize':
+      return { width, height };
+    case 'brightness':
+      return { value: 0 };
+    case 'contrast':
+      return { value: 0 };
+    case 'grayscale':
+      return { value: 100 };
+    case 'sepia':
+      return { value: 100 };
+    case 'invert':
+      return { value: 100 };
+    case 'blur':
+      return { radius: 3 };
+    default:
+      return { value: 0 };
+  }
+}
+
+function refreshFrameImageData(frame: Frame, captions: Caption[], frameIndex: number, crop: CropConfig): Frame {
+  const processed = processFrameForPreview(frame, captions, frameIndex, crop);
+  return {
+    ...frame,
+    imageData: processed,
+    width: processed.width,
+    height: processed.height,
+  };
 }
 
 const defaultCrop: CropConfig = {
@@ -110,14 +179,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const state = get();
     const width = state.canvasWidth;
     const height = state.canvasHeight;
-    const newFrame: Frame = {
-      id: generateId(),
-      imageData: imageData || createBlankImageData(width, height),
-      delay: 100,
-      width,
-      height,
-      disposalMethod: 2,
-    };
+    const newFrame = createFrame(imageData || createBlankImageData(width, height));
 
     const newFrames = [...state.frames];
     if (afterIndex !== undefined && afterIndex >= 0 && afterIndex < newFrames.length) {
@@ -152,7 +214,9 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
     const newFrame: Frame = {
       ...frame,
       id: generateId(),
+      originalImageData: cloneImageData(frame.originalImageData),
       imageData: cloneImageData(frame.imageData),
+      editStack: frame.editStack.map((op) => ({ ...op, id: generateId() })),
     };
 
     const newFrames = [...state.frames];
@@ -205,9 +269,7 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   updateCaption: (id, updates) => {
     const state = get();
-    const newCaptions = state.captions.map((c) =>
-      c.id === id ? { ...c, ...updates } : c
-    );
+    const newCaptions = state.captions.map((c) => (c.id === id ? { ...c, ...updates } : c));
     set({ captions: newCaptions });
   },
 
@@ -218,6 +280,233 @@ export const useEditorStore = create<EditorStore>((set, get) => ({
 
   setCrop: (crop) => set({ crop: { ...get().crop, ...crop } }),
   setExportConfig: (config) => set({ exportConfig: { ...get().exportConfig, ...config } }),
+
+  addEditOperation: (frameIndex, type, params) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+
+    const defaultP = getDefaultParams(type, frame.originalWidth, frame.originalHeight);
+    const newOp: EditOperation = {
+      id: generateId(),
+      type,
+      params: { ...defaultP, ...(params || {}) } as EditParams,
+      enabled: true,
+      createdAt: Date.now(),
+    };
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: [...frame.editStack, newOp],
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  addEditOperationToAll: (type, params) => {
+    const state = get();
+    if (state.frames.length === 0) return;
+
+    const newFrames = state.frames.map((frame, index) => {
+      const defaultP = getDefaultParams(type, frame.originalWidth, frame.originalHeight);
+      const newOp: EditOperation = {
+        id: generateId(),
+        type,
+        params: { ...defaultP, ...(params || {}) } as EditParams,
+        enabled: true,
+        createdAt: Date.now(),
+      };
+
+      const updated = {
+        ...frame,
+        editStack: [...frame.editStack, newOp],
+      };
+      return refreshFrameImageData(updated, state.captions, index, state.crop);
+    });
+
+    set({ frames: newFrames });
+  },
+
+  updateEditOperation: (frameIndex, operationId, updates) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+
+    const newStack = frame.editStack.map((op) =>
+      op.id === operationId ? { ...op, ...updates } : op
+    );
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: newStack,
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  updateEditOperationParams: (frameIndex, operationId, params) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+
+    const newStack = frame.editStack.map((op) =>
+      op.id === operationId ? { ...op, params: { ...op.params, ...params } } : op
+    );
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: newStack,
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  toggleEditOperation: (frameIndex, operationId, enabled) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+
+    const newStack = frame.editStack.map((op) =>
+      op.id === operationId ? { ...op, enabled } : op
+    );
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: newStack,
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  removeEditOperation: (frameIndex, operationId) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+
+    const newStack = frame.editStack.filter((op) => op.id !== operationId);
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: newStack,
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  removeEditOperationFromAll: (operationId) => {
+    const state = get();
+    const newFrames = state.frames.map((frame, index) => {
+      const updated = {
+        ...frame,
+        editStack: frame.editStack.filter((op) => op.id !== operationId),
+      };
+      return refreshFrameImageData(updated, state.captions, index, state.crop);
+    });
+    set({ frames: newFrames });
+  },
+
+  moveEditOperation: (frameIndex, fromIndex, toIndex) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+    if (fromIndex === toIndex) return;
+
+    const newStack = [...frame.editStack];
+    const [removed] = newStack.splice(fromIndex, 1);
+    newStack.splice(toIndex, 0, removed);
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: newStack,
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  clearEditStack: (frameIndex) => {
+    const state = get();
+    const frame = state.frames[frameIndex];
+    if (!frame) return;
+
+    const newFrames = [...state.frames];
+    newFrames[frameIndex] = {
+      ...frame,
+      editStack: [],
+    };
+
+    const refreshed = refreshFrameImageData(
+      newFrames[frameIndex],
+      state.captions,
+      frameIndex,
+      state.crop
+    );
+    newFrames[frameIndex] = refreshed;
+
+    set({ frames: newFrames });
+  },
+
+  clearAllEditStacks: () => {
+    const state = get();
+    const newFrames = state.frames.map((frame, index) => {
+      const updated = { ...frame, editStack: [] };
+      return refreshFrameImageData(updated, state.captions, index, state.crop);
+    });
+    set({ frames: newFrames });
+  },
 
   clearAll: () =>
     set({

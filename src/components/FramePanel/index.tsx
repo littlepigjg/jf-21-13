@@ -9,7 +9,6 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
@@ -18,7 +17,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { Copy, Trash2, Plus, Clock, GripVertical } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
-import { imageDataToDataURL } from '@/utils/imageUtils';
+import { processFrameForThumbnail } from '@/utils/frameProcessor';
 import { cn } from '@/lib/utils';
 
 interface SortableFrameItemProps {
@@ -65,7 +64,10 @@ function SortableFrameItem({ id, index }: SortableFrameItemProps) {
     if (!canvas || !frame) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    ctx.putImageData(frame.imageData, 0, 0);
+    const processed = processFrameForThumbnail(frame);
+    canvas.width = processed.width;
+    canvas.height = processed.height;
+    ctx.putImageData(processed, 0, 0);
   };
 
   requestAnimationFrame(renderThumbnail);

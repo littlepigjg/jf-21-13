@@ -1,10 +1,78 @@
+export type EditOperationType =
+  | 'crop'
+  | 'resize'
+  | 'brightness'
+  | 'contrast'
+  | 'grayscale'
+  | 'sepia'
+  | 'invert'
+  | 'blur';
+
+export interface CropParams {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface ResizeParams {
+  width: number;
+  height: number;
+}
+
+export interface BrightnessParams {
+  value: number;
+}
+
+export interface ContrastParams {
+  value: number;
+}
+
+export interface GrayscaleParams {
+  value: number;
+}
+
+export interface SepiaParams {
+  value: number;
+}
+
+export interface InvertParams {
+  value: number;
+}
+
+export interface BlurParams {
+  radius: number;
+}
+
+export type EditParams =
+  | CropParams
+  | ResizeParams
+  | BrightnessParams
+  | ContrastParams
+  | GrayscaleParams
+  | SepiaParams
+  | InvertParams
+  | BlurParams;
+
+export interface EditOperation {
+  id: string;
+  type: EditOperationType;
+  params: EditParams;
+  enabled: boolean;
+  createdAt: number;
+}
+
 export interface Frame {
   id: string;
   imageData: ImageData;
+  originalImageData: ImageData;
   delay: number;
   width: number;
   height: number;
+  originalWidth: number;
+  originalHeight: number;
   disposalMethod: number;
+  editStack: EditOperation[];
 }
 
 export interface Caption {

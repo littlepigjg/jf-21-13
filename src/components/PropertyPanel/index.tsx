@@ -8,9 +8,21 @@ import {
   Plus,
   Trash2,
   Clock,
+  Sliders,
+  Sun,
+  Contrast,
+  CircleDot,
+  Moon,
+  RefreshCw,
+  Zap,
+  ArrowUp,
+  ArrowDown,
+  Copy,
+  Layers,
+  X,
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editorStore';
-import type { Caption } from '@/types';
+import type { Caption, EditOperation, EditOperationType } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface PanelSectionProps {
@@ -189,6 +201,251 @@ function CaptionEditor({ caption }: { caption: Caption }) {
   );
 }
 
+const EDIT_OPERATION_CONFIG: {
+  type: EditOperationType;
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+  description: string;
+}[] = [
+  { type: 'crop', label: '裁剪', icon: <Crop className="w-4 h-4" />, color: 'text-orange-400', description: '裁切图像区域' },
+  { type: 'resize', label: '缩放', icon: <Sliders className="w-4 h-4" />, color: 'text-cyan-400', description: '调整图像尺寸' },
+  { type: 'brightness', label: '亮度', icon: <Sun className="w-4 h-4" />, color: 'text-yellow-400', description: '调整画面亮度' },
+  { type: 'contrast', label: '对比度', icon: <Contrast className="w-4 h-4" />, color: 'text-pink-400', description: '调整画面对比度' },
+  { type: 'grayscale', label: '灰度', icon: <CircleDot className="w-4 h-4" />, color: 'text-slate-400', description: '转换为黑白效果' },
+  { type: 'sepia', label: '怀旧', icon: <Moon className="w-4 h-4" />, color: 'text-amber-600', description: '复古棕褐色调' },
+  { type: 'invert', label: '反色', icon: <RefreshCw className="w-4 h-4" />, color: 'text-purple-400', description: '颜色反转效果' },
+  { type: 'blur', label: '模糊', icon: <Zap className="w-4 h-4" />, color: 'text-blue-400', description: '高斯模糊效果' },
+];
+
+function OperationEditor({
+  operation,
+  frameIndex,
+  isFirst,
+  isLast,
+}: {
+  operation: EditOperation;
+  frameIndex: number;
+  isFirst: boolean;
+  isLast: boolean;
+}) {
+  const {
+    updateEditOperationParams,
+    toggleEditOperation,
+    removeEditOperation,
+    moveEditOperation,
+    frames,
+  } = useEditorStore();
+
+  const frame = frames[frameIndex];
+  const config = EDIT_OPERATION_CONFIG.find((c) => c.type === operation.type);
+  if (!config || !frame) return null;
+
+  const renderParamsControls = () => {
+    switch (operation.type) {
+      case 'crop': {
+        const params = operation.params as { x: number; y: number; width: number; height: number };
+        return (
+          <div className="space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">X 起点</label>
+                <input
+                  type="number"
+                  value={params.x}
+                  onChange={(e) =>
+                    updateEditOperationParams(frameIndex, operation.id, { x: Number(e.target.value) })
+                  }
+                  className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:outline-none focus:border-violet-500"
+                  min={0}
+                  max={frame.originalWidth}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Y 起点</label>
+                <input
+                  type="number"
+                  value={params.y}
+                  onChange={(e) =>
+                    updateEditOperationParams(frameIndex, operation.id, { y: Number(e.target.value) })
+                  }
+                  className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:outline-none focus:border-violet-500"
+                  min={0}
+                  max={frame.originalHeight}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">宽度</label>
+                <input
+                  type="number"
+                  value={params.width}
+                  onChange={(e) =>
+                    updateEditOperationParams(frameIndex, operation.id, { width: Number(e.target.value) })
+                  }
+                  className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:outline-none focus:border-violet-500"
+                  min={1}
+                  max={frame.originalWidth}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">高度</label>
+                <input
+                  type="number"
+                  value={params.height}
+                  onChange={(e) =>
+                    updateEditOperationParams(frameIndex, operation.id, { height: Number(e.target.value) })
+                  }
+                  className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:outline-none focus:border-violet-500"
+                  min={1}
+                  max={frame.originalHeight}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      }
+      case 'resize': {
+        const params = operation.params as { width: number; height: number };
+        return (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">宽度</label>
+              <input
+                type="number"
+                value={params.width}
+                onChange={(e) =>
+                  updateEditOperationParams(frameIndex, operation.id, { width: Number(e.target.value) })
+                }
+                className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:outline-none focus:border-violet-500"
+                min={1}
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 block mb-1">高度</label>
+              <input
+                type="number"
+                value={params.height}
+                onChange={(e) =>
+                  updateEditOperationParams(frameIndex, operation.id, { height: Number(e.target.value) })
+                }
+                className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-xs text-white focus:outline-none focus:border-violet-500"
+                min={1}
+              />
+            </div>
+          </div>
+        );
+      }
+      case 'brightness':
+      case 'contrast':
+      case 'grayscale':
+      case 'sepia':
+      case 'invert': {
+        const params = operation.params as { value: number };
+        const range =
+          operation.type === 'brightness'
+            ? { min: -100, max: 100 }
+            : operation.type === 'contrast'
+              ? { min: -100, max: 100 }
+              : { min: 0, max: 100 };
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-slate-400">强度</label>
+              <span className="text-xs text-slate-300 font-mono">{params.value}</span>
+            </div>
+            <input
+              type="range"
+              min={range.min}
+              max={range.max}
+              value={params.value}
+              onChange={(e) =>
+                updateEditOperationParams(frameIndex, operation.id, { value: Number(e.target.value) })
+              }
+              className="w-full h-1 bg-slate-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+            />
+          </div>
+        );
+      }
+      case 'blur': {
+        const params = operation.params as { radius: number };
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-xs text-slate-400">模糊半径</label>
+              <span className="text-xs text-slate-300 font-mono">{params.radius}px</span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={20}
+              step={0.5}
+              value={params.radius}
+              onChange={(e) =>
+                updateEditOperationParams(frameIndex, operation.id, { radius: Number(e.target.value) })
+              }
+              className="w-full h-1 bg-slate-700 rounded-full appearance-none cursor-pointer accent-violet-500"
+            />
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        'bg-slate-800/50 rounded-lg border transition-all',
+        operation.enabled ? 'border-slate-600' : 'border-slate-700/50 opacity-60'
+      )}
+    >
+      <div className="flex items-center gap-2 px-3 py-2">
+        <label className="flex items-center cursor-pointer">
+          <input
+            type="checkbox"
+            checked={operation.enabled}
+            onChange={(e) => toggleEditOperation(frameIndex, operation.id, e.target.checked)}
+            className="w-3.5 h-3.5 rounded border-slate-600 text-violet-600 focus:ring-violet-500 bg-slate-900"
+          />
+        </label>
+        <div className={cn('flex items-center gap-1.5 flex-1 min-w-0', config.color)}>
+          {config.icon}
+          <span className="text-xs font-medium text-slate-200 truncate">{config.label}</span>
+        </div>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => moveEditOperation(frameIndex, frame.editStack.indexOf(operation), frame.editStack.indexOf(operation) - 1)}
+            disabled={isFirst}
+            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-white rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="上移"
+          >
+            <ArrowUp className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => moveEditOperation(frameIndex, frame.editStack.indexOf(operation), frame.editStack.indexOf(operation) + 1)}
+            disabled={isLast}
+            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-white rounded disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            title="下移"
+          >
+            <ArrowDown className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => removeEditOperation(frameIndex, operation.id)}
+            className="p-1 hover:bg-slate-700 text-slate-400 hover:text-orange-400 rounded transition-colors"
+            title="删除"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      </div>
+      {operation.enabled && <div className="px-3 pb-3">{renderParamsControls()}</div>}
+    </div>
+  );
+}
+
 export default function PropertyPanel() {
   const {
     captions,
@@ -198,12 +455,37 @@ export default function PropertyPanel() {
     exportConfig,
     setExportConfig,
     frames,
+    selectedFrameIndex,
     canvasWidth,
     canvasHeight,
     setAllFrameDelays,
+    addEditOperation,
+    addEditOperationToAll,
+    clearEditStack,
+    clearAllEditStacks,
   } = useEditorStore();
 
   const [globalDelay, setGlobalDelay] = useState(100);
+  const [applyToAll, setApplyToAll] = useState(false);
+
+  const selectedFrame = selectedFrameIndex >= 0 ? frames[selectedFrameIndex] : null;
+  const editStack = selectedFrame?.editStack || [];
+
+  const handleAddOperation = (type: EditOperationType) => {
+    if (applyToAll) {
+      addEditOperationToAll(type);
+    } else if (selectedFrameIndex >= 0) {
+      addEditOperation(selectedFrameIndex, type);
+    }
+  };
+
+  const handleClearEditStack = () => {
+    if (applyToAll) {
+      clearAllEditStacks();
+    } else if (selectedFrameIndex >= 0) {
+      clearEditStack(selectedFrameIndex);
+    }
+  };
 
   return (
     <div className="w-80 bg-slate-900/50 border-l border-slate-700 flex flex-col flex-shrink-0 overflow-y-auto">
@@ -241,6 +523,76 @@ export default function PropertyPanel() {
       </PanelSection>
 
       <PanelSection
+        title="编辑操作"
+        icon={<Layers className="w-4 h-4 text-violet-400" />}
+        defaultOpen={true}
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={applyToAll}
+                onChange={(e) => setApplyToAll(e.target.checked)}
+                className="w-3.5 h-3.5 rounded border-slate-600 text-cyan-600 focus:ring-cyan-500 bg-slate-900"
+              />
+              <span className="text-xs text-slate-400">应用到所有帧</span>
+            </label>
+            {selectedFrameIndex >= 0 && (
+              <div className="text-xs text-slate-500">
+                第 {selectedFrameIndex + 1} 帧
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            {EDIT_OPERATION_CONFIG.map((op) => (
+              <button
+                key={op.type}
+                onClick={() => handleAddOperation(op.type)}
+                disabled={frames.length === 0}
+                className="flex flex-col items-center gap-1 py-2 px-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors border border-slate-700"
+                title={op.description}
+              >
+                <div className={op.color}>{op.icon}</div>
+                <span className="text-[10px] text-slate-300">{op.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            {editStack.length === 0 ? (
+              <div className="text-center py-6 text-slate-500 text-xs">
+                <Copy className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p>暂无编辑操作</p>
+                <p className="mt-0.5 text-slate-600">点击上方按钮添加效果</p>
+              </div>
+            ) : (
+              editStack.map((op, i) => (
+                <OperationEditor
+                  key={op.id}
+                  operation={op}
+                  frameIndex={selectedFrameIndex}
+                  isFirst={i === 0}
+                  isLast={i === editStack.length - 1}
+                />
+              ))
+            )}
+          </div>
+
+          {editStack.length > 0 && (
+            <button
+              onClick={handleClearEditStack}
+              className="w-full py-1.5 bg-slate-700 hover:bg-orange-600 text-slate-300 hover:text-white text-xs rounded-lg transition-colors flex items-center justify-center gap-1"
+            >
+              <Trash2 className="w-3 h-3" />
+              {applyToAll ? '清除所有帧的编辑' : '清除当前帧的编辑'}
+            </button>
+          )}
+        </div>
+      </PanelSection>
+
+      <PanelSection
         title="字幕"
         icon={<Type className="w-4 h-4 text-violet-400" />}
         defaultOpen={true}
@@ -265,7 +617,7 @@ export default function PropertyPanel() {
       </PanelSection>
 
       <PanelSection
-        title="裁切"
+        title="裁切 (全局)"
         icon={<Crop className="w-4 h-4 text-orange-400" />}
         defaultOpen={false}
       >

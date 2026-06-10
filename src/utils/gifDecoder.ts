@@ -48,13 +48,18 @@ export async function decodeGif(file: File): Promise<Frame[]> {
       }
     }
 
+    const imageDataCopy = cloneImageData(fullImageData);
     resultFrames.push({
       id: generateId(),
-      imageData: cloneImageData(fullImageData),
+      imageData: imageDataCopy,
+      originalImageData: cloneImageData(fullImageData),
       delay: frame.delay > 0 ? frame.delay * 10 : 100,
       width,
       height,
+      originalWidth: width,
+      originalHeight: height,
       disposalMethod: frame.disposalType,
+      editStack: [],
     });
   }
 
